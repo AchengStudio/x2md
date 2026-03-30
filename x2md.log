@@ -1352,3 +1352,30 @@ OSError: [Errno 48] Address already in use
 2026-03-30 01:37:17,036 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
 2026-03-30 01:37:17,036 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
 2026-03-30 01:37:17,036 [INFO] x2md_server - 配置加载成功, port=9527, save_paths=[]
+2026-03-30 02:04:05,422 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:04:05,422 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:04:05,423 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:04:05,423 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:04:05,423 [INFO] x2md_server - 配置加载成功, port=9527, save_paths=[]
+2026-03-30 02:04:11,745 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:04:11,746 [INFO] x2md_server - 配置加载成功, port=9527, save_paths=[]
+2026-03-30 02:04:11,920 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:04:11,920 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:04:11,920 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:04:11,920 [INFO] x2md_server - 配置加载成功, port=9527, save_paths=[]
+2026-03-30 02:14:02,169 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:14:02,169 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:14:02,169 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:14:02,170 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:14:02,170 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:14:02,170 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:14:02,170 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:14:02,170 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:14:02,170 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:14:02,170 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:14:02,170 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:14:02,171 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:14:02,171 [INFO] x2md_server - 配置加载成功, port=9527, save_paths=[]
+2026-03-30 02:14:02,171 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:17:29,059 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 02:17:29,059 [INFO] x2md_server - 配置加载成功, port=9527, save_paths=[]
