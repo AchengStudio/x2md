@@ -146,8 +146,8 @@ function resetAllConfig() {
 }
 
 function applyConfigToUI(cfg) {
-    // 主题
-    const theme = cfg.theme || localStorage.getItem("x2md_theme") || "light";
+    // 主题：优先使用 localStorage（用户选择），其次才是 config.json
+    const theme = localStorage.getItem("x2md_theme") || cfg.theme || "light";
     applyTheme(theme);
 
     // 服务设置
