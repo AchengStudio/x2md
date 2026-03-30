@@ -291,11 +291,28 @@ def stop_server():
 
 
 def restart_server():
-    """重启 HTTP Server"""
-    logger.info("正在重启服务...")
-    stop_server()
-    start_server_thread()
-    logger.info("服务已重启")
+    """重启 HTTP Server（在独立线程中执行，避免阻塞托盘菜单回调）"""
+    import time
+
+    def _do_restart():
+        logger.info("正在重启服务...")
+        stop_server()
+        # 等待端口释放（Windows 上 TIME_WAIT 可能需要短暂延迟）
+        time.sleep(0.5)
+        try:
+            start_server_thread()
+            logger.info("服务已重启")
+        except OSError as e:
+            logger.error(f"重启失败（端口可能仍被占用）: {e}")
+            # 再等一会儿重试一次
+            time.sleep(1.5)
+            try:
+                start_server_thread()
+                logger.info("服务已重启（第二次尝试成功）")
+            except Exception as e2:
+                logger.error(f"重启最终失败: {e2}")
+
+    threading.Thread(target=_do_restart, daemon=True, name="x2md-restart").start()
 
 
 # ─────────────────────────────────────────────
@@ -367,8 +384,10 @@ def run_tray():
             subprocess.Popen(["xdg-open", EXT_DIR])
 
     def on_quit(icon, item):
-        stop_server()
-        icon.stop()
+        def _do_quit():
+            stop_server()
+            icon.stop()
+        threading.Thread(target=_do_quit, daemon=True, name="x2md-quit").start()
 
     menu = pystray.Menu(
         pystray.MenuItem("X2MD 服务运行中", None, enabled=False),
