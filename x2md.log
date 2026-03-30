@@ -1331,3 +1331,24 @@ OSError: [Errno 48] Address already in use
 2026-02-25 17:46:02,197 [INFO] 127.0.0.1 - "GET /favicon.ico HTTP/1.1" 404 -
 2026-02-25 17:47:15,388 [INFO] 127.0.0.1 - "GET /ping HTTP/1.1" 200 -
 2026-02-25 17:47:15,389 [INFO] 127.0.0.1 - "GET /config HTTP/1.1" 200 -
+2026-03-30 01:35:42,859 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 01:35:42,859 [INFO] x2md_server - 配置加载成功, port=9527, save_paths=[]
+2026-03-30 01:36:37,408 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 01:36:37,408 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 01:36:37,408 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 01:36:37,409 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 01:36:37,409 [INFO] x2md_server - 配置加载成功, port=9527, save_paths=[]
+2026-03-30 01:36:42,612 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 01:36:42,612 [INFO] x2md_server - 配置加载成功, port=9527, save_paths=[]
+2026-03-30 01:37:04,358 [INFO] x2md_server - server.py 独立启动模式
+2026-03-30 01:37:04,359 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 01:37:04,359 [INFO] x2md_server - 配置加载成功, port=9527, save_paths=[]
+2026-03-30 01:37:04,359 [INFO] x2md_server - 绑定 127.0.0.1:9527...
+2026-03-30 01:37:04,360 [INFO] x2md_server - x2md 服务已启动，监听 http://127.0.0.1:9527
+2026-03-30 01:37:04,360 [INFO] x2md_server - 保存路径: []
+2026-03-30 01:37:07,288 [DEBUG] x2md_server - GET /ping from 127.0.0.1
+2026-03-30 01:37:07,288 [INFO] x2md_server - 127.0.0.1 - "GET /ping HTTP/1.1" 200 -
+2026-03-30 01:37:17,035 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 01:37:17,036 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 01:37:17,036 [INFO] x2md_server - 首次加载配置文件: /tmp/x2md-studio/config.json
+2026-03-30 01:37:17,036 [INFO] x2md_server - 配置加载成功, port=9527, save_paths=[]

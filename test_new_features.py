@@ -69,12 +69,12 @@ def test_feishu_platform():
     assert "飞书测试文档" in content
 
 
-@test("飞书: 平台分类文件夹名为 Feishu")
+@test("飞书: 平台分类文件夹名为 飞书")
 def test_feishu_folder():
     cfg = dict(server.DEFAULT_CONFIG)
     folder_names = cfg.get("platform_folder_names", {})
-    assert "Feishu" in folder_names, f"缺少 Feishu 键: {folder_names}"
-    assert folder_names["Feishu"] == "Feishu"
+    assert "飞书" in folder_names, f"缺少飞书键: {folder_names}"
+    assert folder_names["飞书"] == "飞书"
 
 
 @test("飞书: 文章图片本地化处理")
@@ -794,13 +794,13 @@ def test_wechat_platform():
         "article_title": "微信公众号文章标题",
         "article_content": "公众号文章正文",
         "images": [], "videos": [],
-        "platform": "WeChat",
+        "platform": "微信公众号",
     }
     _, content, _, _ = server.build_markdown(data, cfg)
-    assert '平台: "WeChat"' in content
-    # WeChat 应有对应的文件夹名
-    folder = cfg["platform_folder_names"].get("WeChat")
-    assert folder == "WeChat"
+    assert '平台: "微信公众号"' in content
+    # 微信公众号 应有对应的文件夹名
+    folder = cfg["platform_folder_names"].get("微信公众号")
+    assert folder == "微信公众号"
 
 
 @test("parse_floor_range: 混合格式 '1-3,7,10-12' 解析正确")
@@ -896,12 +896,11 @@ def test_permissions_request_catch():
     with open(bg_path, "r", encoding="utf-8") as f:
         bg_content = f.read()
 
-    # chrome.permissions.request 应有 .catch() 处理
-    assert "permissions.request" in bg_content
-    # 检查 request 后有 .catch
-    perm_idx = bg_content.index("permissions.request")
-    nearby = bg_content[perm_idx:perm_idx+200]
-    assert ".catch" in nearby, "chrome.permissions.request 没有 .catch() 防护"
+    # V1.6.0 修复：chrome.permissions.request 不在 service worker 中调用
+    # 权限请求应在 options.js 中进行（有用户手势）
+    # 所以 background.js 中不应该有 permissions.request
+    assert "permissions.request" not in bg_content or "// 注：chrome.permissions.request()" in bg_content, \
+        "background.js 不应该调用 permissions.request（MV3 service worker 限制）"
 
 
 @test("background.js: 启动时配置获取有超时和异常捕获")
@@ -981,16 +980,17 @@ print("\n=== 13. 已知风险点检测 ===")
 @test("风险: chrome.permissions.request 在 service worker 中可能失败")
 def test_risk_permissions_in_sw():
     """
-    chrome.permissions.request() 只能在用户手势上下文中调用。
-    background.js (service worker) 中直接调用可能静默失败。
-    验证代码中有 .catch() 防护。
+    V1.6.0 修复：chrome.permissions.request() 不在 service worker 中调用。
+    权限请求已移至 options.js（有用户手势上下文）。
+    验证 background.js 中已移除该调用或有说明注释。
     """
     bg_path = os.path.join(os.path.dirname(__file__), "extension", "background.js")
     with open(bg_path, "r", encoding="utf-8") as f:
         bg = f.read()
-    # 确认 permissions.request 有 catch 防护
-    assert ".catch(() => false)" in bg or ".catch" in bg[bg.index("permissions.request"):bg.index("permissions.request")+150], \
-        "permissions.request 缺少 .catch 防护"
+    # 确认已修复（不在 service worker 中调用）
+    if "permissions.request" in bg:
+        assert "// 注：chrome.permissions.request()" in bg, \
+            "background.js 不应该调用 permissions.request（已移至 options.js）"
 
 
 @test("风险: _config_cache 双重检查锁模式正确")
