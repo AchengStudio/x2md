@@ -531,9 +531,10 @@ def main():
         logger.info("首次运行，启动设置向导...")
         completed = run_setup_wizard()
         if not completed:
-            logger.info("设置向导被取消，退出。")
-            sys.exit(0)
-        logger.info("设置向导已完成")
+            logger.warning("设置向导被取消或失败，将继续启动服务（无配置）")
+            # 注意：不退出，继续启动服务。用户稍后可从托盘菜单重新运行向导
+        else:
+            logger.info("设置向导已完成")
     else:
         logger.info("向导已完成，跳过")
 
