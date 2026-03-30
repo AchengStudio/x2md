@@ -203,7 +203,7 @@ function applyConfigToUI(cfg) {
 
     // 图片
     document.getElementById("downloadImages").checked = cfg.download_images !== false;
-    document.getElementById("imageSubfolder").value = cfg.image_subfolder || "assets";
+    document.getElementById("imageSubfolder").value = cfg.image_subfolder || "媒体文件";
 
     // 覆盖策略
     document.getElementById("overwriteExisting").checked = !!cfg.overwrite_existing;
@@ -617,7 +617,7 @@ function saveConfig() {
         platform_folder_names: platformFolderNames,
         // 图片
         download_images: document.getElementById("downloadImages").checked,
-        image_subfolder: document.getElementById("imageSubfolder").value.trim() || "assets",
+        image_subfolder: document.getElementById("imageSubfolder").value.trim() || "媒体文件",
         // 覆盖
         overwrite_existing: document.getElementById("overwriteExisting").checked,
         // 评论

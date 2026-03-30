@@ -19,7 +19,7 @@
     "微信公众号": "微信公众号"
   },
   "download_images": true,
-  "image_subfolder": "assets",
+  "image_subfolder": "媒体文件",
   "enable_wechat_video_channel": false,
   "overwrite_existing": false,
   "sync_enabled": true,
