@@ -91,7 +91,7 @@ DEFAULT_CONFIG = {
     },
     # 图片下载到本地（V1.2 新增）
     "download_images": True,
-    "image_subfolder": "assets",
+    "image_subfolder": "媒体文件",
     # 微信视频号视频保存（默认关闭）
     "enable_wechat_video_channel": False,
     # 覆盖已有同源文件（默认关闭）
@@ -107,6 +107,35 @@ DEFAULT_CONFIG = {
     "discourse_domains": ["linux.do"],
     # 嵌入模式：iframe = 用 iframe 嵌入视频, local = 下载到本地引用
     "embed_mode": "local",
+    # ── 多目标保存开关 ──
+    "save_to_obsidian": True,
+    "save_to_feishu": False,
+    "save_to_notion": False,
+    "export_html": False,
+    # ── 主题 ──
+    "theme": "light",
+    # ── 飞书配置 ──
+    "feishu_api_domain": "feishu",
+    "feishu_app_id": "",
+    "feishu_app_secret": "",
+    "feishu_app_token": "",
+    "feishu_table_id": "",
+    "feishu_upload_md": False,
+    "feishu_upload_html": False,
+    # ── Notion 配置 ──
+    "notion_token": "",
+    "notion_database_id": "",
+    "notion_prop_title": "标题",
+    "notion_prop_url": "链接",
+    "notion_prop_author": "作者",
+    "notion_prop_tags": "标签",
+    "notion_prop_saved_date": "保存日期",
+    "notion_prop_type": "类型",
+    "notion_prop_comment_count": "评论数",
+    # ── HTML 导出 ──
+    "html_export_folder": "X2MD导出",
+    # ── 复制解锁 ──
+    "enable_copy_unlock": False,
 }
 
 _log_handlers = [logging.FileHandler(os.path.join(APP_DIR, "x2md.log"), encoding="utf-8")]
