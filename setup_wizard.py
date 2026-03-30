@@ -56,6 +56,7 @@ C = {
     "text":         "#e7e9ea",
     "muted":        "#71767b",
     "success":      "#00ba7c",
+    "warning":      "#f5a623",
 }
 
 # 字体（Mac 优先 PingFang SC，Windows 优先微软雅黑 UI）
@@ -76,16 +77,16 @@ class SetupWizard:
         self.root = tk.Tk()
         logger.debug("tk.Tk() 创建成功")
         self.root.title("X2MD 设置向导")
-        self.root.geometry("720x680")
-        self.root.minsize(600, 500)
+        self.root.geometry("720x720")
+        self.root.minsize(600, 550)
         self.root.resizable(True, True)
         self.root.configure(bg=C["bg"])
 
         # 居中显示
         self.root.update_idletasks()
         x = (self.root.winfo_screenwidth() - 720) // 2
-        y = (self.root.winfo_screenheight() - 680) // 2
-        self.root.geometry(f"720x680+{x}+{y}")
+        y = (self.root.winfo_screenheight() - 720) // 2
+        self.root.geometry(f"720x720+{x}+{y}")
 
         # 确保窗口置顶可见（解决 LSUIElement app 窗口被遮挡的问题）
         self.root.lift()
@@ -93,9 +94,22 @@ class SetupWizard:
         self.root.after(300, lambda: self.root.attributes("-topmost", False))
         self.root.focus_force()
 
-        # 用户配置数据
-        self.md_path = tk.StringVar(value=DEFAULT_MD_PATH)
-        self.video_path = tk.StringVar(value=DEFAULT_VIDEO_PATH)
+        # 用户配置数据：优先读取已保存的路径，否则用默认值
+        saved_md, saved_vid = DEFAULT_MD_PATH, DEFAULT_VIDEO_PATH
+        if os.path.exists(CONFIG_FILE):
+            try:
+                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                    saved_cfg = json.load(f)
+                paths = saved_cfg.get("save_paths", [])
+                if paths and paths[0]:
+                    saved_md = paths[0]
+                if saved_cfg.get("video_save_path"):
+                    saved_vid = saved_cfg["video_save_path"]
+                logger.debug(f"从已有配置读取路径: md={saved_md}, vid={saved_vid}")
+            except Exception as e:
+                logger.warning(f"读取已有配置路径失败: {e}")
+        self.md_path = tk.StringVar(value=saved_md)
+        self.video_path = tk.StringVar(value=saved_vid)
 
         self.current_step = 0
         self.completed = False
@@ -164,6 +178,7 @@ class SetupWizard:
             "primary":   {"fg": "#ffffff", "bg": C["accent"],  "hover": C["accent_hover"]},
             "secondary": {"fg": "#ffffff", "bg": "#3a3d44",    "hover": "#4a4d54"},
             "success":   {"fg": "#ffffff", "bg": C["success"], "hover": "#00a06a"},
+            "skip":      {"fg": C["muted"], "bg": C["surface2"], "hover": "#2a2d34"},
         }
         s = styles[style]
 
@@ -226,10 +241,10 @@ class SetupWizard:
                      fg=C["text"], bg=C["surface"], anchor="w").pack(
                 fill="x", padx=18, pady=7)
 
-        self._make_btn(self.button_frame, "跳过设置 ▸",
-                       self._skip_wizard, "secondary").pack(side="left")
         self._make_btn(self.button_frame, "开始设置 →",
                        lambda: self._show_step(1)).pack(side="right")
+        self._make_btn(self.button_frame, "跳过，直接启动",
+                       self._skip_finish, "skip").pack(side="left")
 
     # ── 步骤二：路径设置 ──────────────────────────
     def _step_paths(self):
@@ -238,19 +253,29 @@ class SetupWizard:
             anchor="w", pady=(8, 2))
 
         tk.Label(self.content_frame,
-                 text="选择 Markdown 文件和视频文件的保存位置，文件夹不存在会自动创建",
+                 text="选择文件的保存位置，不设置则使用默认路径，文件夹不存在会自动创建",
                  font=FONT(12), fg=C["muted"], bg=C["bg"]).pack(
-            anchor="w", pady=(0, 18))
+            anchor="w", pady=(0, 14))
 
         # Markdown 路径卡片
-        self._path_card("📄 Markdown 文件保存路径",
-                        "推文和文章将以 .md 文件保存到此目录",
-                        self.md_path)
+        self._path_card(
+            "📄 Markdown 保存路径",
+            "保存的推文、文章等 .md 文件存放位置\n图片会下载到此目录下的「媒体文件」子文件夹中",
+            self.md_path,
+        )
 
         # 视频路径卡片
-        self._path_card("🎞️ 视频文件保存路径",
-                        "推文中的视频将下载到此目录，在 Obsidian 中可内嵌播放",
-                        self.video_path)
+        self._path_card(
+            "🎞️ 视频独立保存路径",
+            "推文中的视频单独保存到此目录（不设置则跟随 Markdown 目录）\n在 Obsidian 中可内嵌播放",
+            self.video_path,
+        )
+
+        # 路径说明提示
+        tk.Label(self.content_frame,
+                 text="💡 这些路径之后可以在 Chrome 扩展的设置页面中随时修改",
+                 font=FONT(11), fg=C["warning"], bg=C["bg"],
+                 anchor="w").pack(fill="x", pady=(6, 0))
 
         self._make_btn(self.button_frame, "← 上一步",
                        lambda: self._show_step(0), "secondary").pack(side="left")
@@ -260,13 +285,14 @@ class SetupWizard:
     def _path_card(self, title, hint, string_var):
         """复用的路径选择卡片"""
         card = self._make_card(self.content_frame)
-        card.pack(fill="x", pady=(0, 14))
+        card.pack(fill="x", pady=(0, 10))
 
         tk.Label(card, text=title, font=FONT(13, "bold"),
                  fg=C["text"], bg=C["surface"], anchor="w").pack(
             fill="x", padx=18, pady=(14, 2))
         tk.Label(card, text=hint, font=FONT(11),
-                 fg=C["muted"], bg=C["surface"], anchor="w").pack(
+                 fg=C["muted"], bg=C["surface"], anchor="w",
+                 justify="left").pack(
             fill="x", padx=18, pady=(0, 8))
 
         row = tk.Frame(card, bg=C["surface"])
@@ -379,7 +405,7 @@ class SetupWizard:
 
         for icon, label, var in [
             ("📄", "Markdown 保存路径", self.md_path),
-            ("🎞️", "视频保存路径", self.video_path),
+            ("🎞️", "视频独立保存路径", self.video_path),
         ]:
             row = tk.Frame(card, bg=C["surface"])
             row.pack(fill="x", padx=18, pady=4)
@@ -388,11 +414,20 @@ class SetupWizard:
             tk.Label(row, text=var.get(), font=FONT(11),
                      fg=C["text"], bg=C["surface"]).pack(side="left", padx=(4, 0))
 
+        # 媒体子文件夹说明
+        row2 = tk.Frame(card, bg=C["surface"])
+        row2.pack(fill="x", padx=18, pady=4)
+        tk.Label(row2, text="🖼️  图片子文件夹：", font=FONT(11),
+                 fg=C["muted"], bg=C["surface"]).pack(side="left")
+        tk.Label(row2, text="媒体文件/", font=FONT(11),
+                 fg=C["text"], bg=C["surface"]).pack(side="left", padx=(4, 0))
+
         # 底部间距
         tk.Frame(card, bg=C["surface"], height=8).pack()
 
         tk.Label(self.content_frame,
-                 text="点击「启动服务」后，X2MD 将在系统托盘后台运行\n在 Chrome 中使用扩展即可开始保存内容",
+                 text="点击「启动服务」后，X2MD 将在系统托盘后台运行\n"
+                      "更多设置（飞书、Notion、评论等）请在 Chrome 扩展设置页中配置",
                  font=FONT(12), fg=C["muted"], bg=C["bg"],
                  justify="center").pack(pady=(0, 8))
 
@@ -400,59 +435,6 @@ class SetupWizard:
                        lambda: self._show_step(2), "secondary").pack(side="left")
         self._make_btn(self.button_frame, "🚀 启动服务",
                        self._finish, "success").pack(side="right")
-
-    # ── 跳过向导（使用默认配置） ──────────────────
-    def _skip_wizard(self):
-        """跳过设置向导，使用默认配置直接启动服务。
-
-        说明：
-        - Markdown 文件默认保存到：桌面/X2MD/MD/
-        - 视频文件默认保存到：桌面/X2MD/Videos/
-        - 服务端口默认为 9527
-        - 以上设置可随时通过系统托盘菜单 → "打开设置向导" 重新配置
-        - 文件夹不存在时会自动创建
-        """
-        logger.info("用户选择跳过向导，使用默认配置")
-
-        md = DEFAULT_MD_PATH
-        vid = DEFAULT_VIDEO_PATH
-
-        try:
-            os.makedirs(md, exist_ok=True)
-        except Exception as e:
-            logger.error(f"创建默认 Markdown 目录失败: {md}, 错误: {e}")
-        try:
-            os.makedirs(vid, exist_ok=True)
-        except Exception as e:
-            logger.error(f"创建默认视频目录失败: {vid}, 错误: {e}")
-
-        config = {}
-        if os.path.exists(CONFIG_FILE):
-            try:
-                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                    config = json.load(f)
-            except Exception:
-                pass
-
-        config.update({
-            "port": config.get("port", 9527),
-            "save_paths": [md],
-            "filename_format": config.get("filename_format", "{summary}"),
-            "max_filename_length": config.get("max_filename_length", 60),
-            "video_save_path": vid,
-            "setup_completed": True,
-        })
-
-        try:
-            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                json.dump(config, f, ensure_ascii=False, indent=2)
-            logger.info(f"默认配置已保存到: {CONFIG_FILE}")
-        except Exception as e:
-            logger.error(f"保存默认配置失败: {e}")
-
-        self.completed = True
-        self.root.destroy()
-        logger.info("向导已跳过，使用默认配置启动")
 
     # ── 完成逻辑 ──────────────────────────────────
     def _finish(self):
@@ -462,18 +444,34 @@ class SetupWizard:
         logger.info(f"向导完成, md_path={md}, video_path={vid}")
 
         # 自动创建目录
-        try:
-            os.makedirs(md, exist_ok=True)
-            logger.debug(f"Markdown 目录已确保存在: {md}")
-        except Exception as e:
-            logger.error(f"创建 Markdown 目录失败: {md}, 错误: {e}")
+        for path, name in [(md, "Markdown"), (vid, "视频")]:
+            if path:
+                try:
+                    os.makedirs(path, exist_ok=True)
+                    logger.debug(f"{name}目录已确保存在: {path}")
+                except Exception as e:
+                    logger.error(f"创建{name}目录失败: {path}, 错误: {e}")
 
-        try:
-            os.makedirs(vid, exist_ok=True)
-            logger.debug(f"视频目录已确保存在: {vid}")
-        except Exception as e:
-            logger.error(f"创建视频目录失败: {vid}, 错误: {e}")
+        self._save_config(md, vid)
 
+    def _skip_finish(self):
+        """跳过向导，保留已有配置，仅补充缺失字段后启动服务"""
+        logger.info("用户选择跳过向导")
+        # 读取已有配置，保留用户之前设置的路径
+        md = self.md_path.get().strip() or DEFAULT_MD_PATH
+        vid = self.video_path.get().strip() or DEFAULT_VIDEO_PATH
+
+        # 自动创建目录
+        for path, name in [(md, "Markdown"), (vid, "视频")]:
+            try:
+                os.makedirs(path, exist_ok=True)
+            except Exception as e:
+                logger.warning(f"创建{name}目录失败: {path}, 错误: {e}")
+
+        self._save_config(md, vid)
+
+    def _save_config(self, md_path, video_path):
+        """统一的配置保存逻辑（向导完成和跳过都走这里）"""
         # 读取已有配置
         config = {}
         if os.path.exists(CONFIG_FILE):
@@ -484,13 +482,14 @@ class SetupWizard:
             except Exception as e:
                 logger.warning(f"读取现有配置失败: {e}")
 
-        # 写入配置
+        # 写入配置（与插件 options.js 保持一致的默认值）
         config.update({
             "port": config.get("port", 9527),
-            "save_paths": [md],
-            "filename_format": config.get("filename_format", "{summary}"),
+            "save_paths": [md_path] if md_path else [],
+            "filename_format": config.get("filename_format", "{summary}_{date}_{author}"),
             "max_filename_length": config.get("max_filename_length", 60),
-            "video_save_path": vid,
+            "video_save_path": video_path,
+            "image_subfolder": config.get("image_subfolder", "媒体文件"),
             "setup_completed": True,
         })
 

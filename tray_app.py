@@ -8,6 +8,7 @@ x2md 系统托盘应用 — 主入口
 import os
 import sys
 import json
+import socket
 import threading
 import subprocess
 import logging
@@ -145,7 +146,10 @@ logger.info("=" * 60)
 
 
 def is_setup_completed() -> bool:
-    """检查是否已完成向导设置"""
+    """检查是否已完成向导设置
+    除了检查 setup_completed 标志，还检查 save_paths 是否为空。
+    如果 save_paths 为空，说明用户从未配置过保存路径，应重新弹出向导。
+    """
     logger.debug(f"检查向导完成状态, CONFIG_FILE={CONFIG_FILE}, 存在={os.path.exists(CONFIG_FILE)}")
     if not os.path.exists(CONFIG_FILE):
         logger.info("配置文件不存在，向导未完成")
@@ -154,7 +158,11 @@ def is_setup_completed() -> bool:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             cfg = json.load(f)
             completed = cfg.get("setup_completed", False)
-            logger.debug(f"setup_completed={completed}")
+            save_paths = cfg.get("save_paths", [])
+            logger.debug(f"setup_completed={completed}, save_paths={save_paths}")
+            if completed and not save_paths:
+                logger.info("setup_completed=true 但 save_paths 为空，视为未完成向导")
+                return False
             return completed
     except Exception as e:
         logger.warning(f"读取配置文件失败: {e}")
@@ -181,20 +189,32 @@ def run_setup_wizard() -> bool:
 def launch_wizard_subprocess():
     """以子进程方式启动设置向导（从托盘菜单调用，避免线程冲突）"""
     logger.info("从托盘菜单启动设置向导子进程...")
-    try:
-        if getattr(sys, 'frozen', False):
-            cmd = [sys.executable, "--wizard"]
-            logger.debug(f"打包环境，执行命令: {cmd}")
-            subprocess.Popen(cmd)
-        else:
-            source_dir = os.path.dirname(os.path.abspath(__file__))
-            script = os.path.join(source_dir, "setup_wizard.py")
-            cmd = [sys.executable, script]
-            logger.debug(f"开发模式，执行命令: {cmd}")
-            subprocess.Popen(cmd)
-        logger.info("设置向导子进程已启动")
-    except Exception as e:
-        logger.error(f"启动设置向导子进程失败: {e}\n{traceback.format_exc()}")
+
+    def _run():
+        try:
+            if getattr(sys, 'frozen', False):
+                cmd = [sys.executable, "--wizard"]
+            else:
+                source_dir = os.path.dirname(os.path.abspath(__file__))
+                script = os.path.join(source_dir, "setup_wizard.py")
+                cmd = [sys.executable, script]
+            logger.debug(f"启动向导命令: {cmd}")
+            proc = subprocess.Popen(cmd)
+            proc.wait()  # 等待向导进程结束
+            logger.info(f"设置向导子进程已退出, returncode={proc.returncode}")
+            # 向导直接写 config.json，通知 server 刷新内存缓存
+            try:
+                from server import reload_config_from_disk
+                cfg = reload_config_from_disk()
+                logger.info(f"向导结束后已刷新配置缓存, save_paths={cfg.get('save_paths', [])}")
+            except Exception as e:
+                logger.warning(f"刷新配置缓存失败: {e}")
+        except Exception as e:
+            logger.error(f"启动设置向导子进程失败: {e}\n{traceback.format_exc()}")
+
+    import threading
+    threading.Thread(target=_run, daemon=True).start()
+    logger.info("设置向导子进程已启动（后台等待）")
 
 
 def get_port() -> int:
@@ -234,8 +254,8 @@ def start_server_thread():
 
     logger.info("正在导入 server 模块...")
     try:
-        from http.server import HTTPServer
-        logger.debug("http.server.HTTPServer 导入成功")
+        from http.server import HTTPServer, ThreadingHTTPServer
+        logger.debug("http.server.ThreadingHTTPServer 导入成功")
     except ImportError as e:
         logger.error(f"http.server 导入失败: {e}")
         raise
@@ -254,7 +274,8 @@ def start_server_thread():
 
     logger.info(f"正在绑定 127.0.0.1:{port}...")
     try:
-        server = HTTPServer(("127.0.0.1", port), X2MDHandler)
+        server = ThreadingHTTPServer(("127.0.0.1", port), X2MDHandler)
+        server.daemon_threads = True  # 确保请求线程随主线程退出
     except OSError as e:
         logger.error(f"端口绑定失败 127.0.0.1:{port}: {e}")
         if "Address already in use" in str(e) or "10048" in str(e):
@@ -284,11 +305,28 @@ def stop_server():
 
 
 def restart_server():
-    """重启 HTTP Server"""
-    logger.info("正在重启服务...")
-    stop_server()
-    start_server_thread()
-    logger.info("服务已重启")
+    """重启 HTTP Server（在独立线程中执行，避免阻塞托盘菜单回调）"""
+    import time
+
+    def _do_restart():
+        logger.info("正在重启服务...")
+        stop_server()
+        # 等待端口释放（Windows 上 TIME_WAIT 可能需要短暂延迟）
+        time.sleep(0.5)
+        try:
+            start_server_thread()
+            logger.info("服务已重启")
+        except OSError as e:
+            logger.error(f"重启失败（端口可能仍被占用）: {e}")
+            # 再等一会儿重试一次
+            time.sleep(1.5)
+            try:
+                start_server_thread()
+                logger.info("服务已重启（第二次尝试成功）")
+            except Exception as e2:
+                logger.error(f"重启最终失败: {e2}")
+
+    threading.Thread(target=_do_restart, daemon=True, name="x2md-restart").start()
 
 
 # ─────────────────────────────────────────────
@@ -360,8 +398,10 @@ def run_tray():
             subprocess.Popen(["xdg-open", EXT_DIR])
 
     def on_quit(icon, item):
-        stop_server()
-        icon.stop()
+        def _do_quit():
+            stop_server()
+            icon.stop()
+        threading.Thread(target=_do_quit, daemon=True, name="x2md-quit").start()
 
     menu = pystray.Menu(
         pystray.MenuItem("X2MD 服务运行中", None, enabled=False),
@@ -481,6 +521,49 @@ def _merge_config_defaults():
         logger.warning(f"合并配置默认值失败: {e}")
 
 
+# 当前配置版本号，升级时递增以触发迁移逻辑
+CONFIG_VERSION = 2  # v1.6.2: 强制重跑向导 + assets→媒体文件
+
+
+def _upgrade_config():
+    """版本升级时的配置迁移逻辑。
+    通过 config_version 字段判断是否需要执行迁移。"""
+    if not os.path.isfile(CONFIG_FILE):
+        return
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+
+        old_version = cfg.get("config_version", 0)
+        if old_version >= CONFIG_VERSION:
+            return  # 已是最新，无需迁移
+
+        changed = False
+
+        # === 迁移到 config_version 2（v1.6.2）===
+        if old_version < 2:
+            # 1) assets → 媒体文件
+            if cfg.get("image_subfolder") == "assets":
+                cfg["image_subfolder"] = "媒体文件"
+                logger.info("升级迁移: image_subfolder 从 'assets' 改为 '媒体文件'")
+
+            # 2) 强制重跑向导（让用户确认新的路径设置）
+            cfg["setup_completed"] = False
+            logger.info("升级迁移: 重置 setup_completed，用户需重新确认路径设置")
+            changed = True
+
+        # 更新版本号
+        cfg["config_version"] = CONFIG_VERSION
+        changed = True
+
+        if changed:
+            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, ensure_ascii=False, indent=2)
+            logger.info(f"配置已升级到 config_version={CONFIG_VERSION}")
+    except Exception as e:
+        logger.warning(f"配置升级失败: {e}")
+
+
 def ensure_config_accessible():
     """确保 config.json 在 APP_DIR（可写位置），打包后首次运行时从资源目录复制。
     同时迁移旧版本遗留在 app 包内的配置。升级时自动补全新增字段。"""
@@ -488,6 +571,8 @@ def ensure_config_accessible():
     if os.path.exists(CONFIG_FILE):
         # 已有配置：合并新版本可能新增的默认字段
         _merge_config_defaults()
+        # 执行版本升级迁移
+        _upgrade_config()
         return
 
     # 优先迁移旧版遗留在 MacOS/ 目录内的配置（用户升级场景）
@@ -516,7 +601,7 @@ def _ensure_minimal_config():
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
-                if cfg.get("setup_completed"):
+                if cfg.get("setup_completed") and cfg.get("save_paths"):
                     return  # 已有完整配置
         except Exception:
             pass
@@ -532,13 +617,25 @@ def _ensure_minimal_config():
         logger.warning(f"创建默认目录失败: {e}")
 
     config = {"port": 9527, "save_paths": [md_path], "video_save_path": vid_path,
-              "filename_format": "{summary}", "max_filename_length": 60, "setup_completed": True}
+              "filename_format": "{summary}", "max_filename_length": 60,
+              "image_subfolder": "媒体文件", "setup_completed": True}
     try:
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
         logger.info(f"已创建最小默认配置: {CONFIG_FILE}")
     except Exception as e:
         logger.error(f"创建默认配置失败: {e}")
+
+
+def _is_port_in_use(port=9527):
+    """检测端口是否已被占用。返回 True 表示已有实例在运行。"""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1)
+            s.connect(("127.0.0.1", port))
+            return True
+    except (ConnectionRefusedError, socket.timeout, OSError):
+        return False
 
 
 def main():
@@ -552,26 +649,36 @@ def main():
         run_setup_wizard()
         return
 
+    # ── 单实例保护：防止多个进程同时绑定端口 ──
+    actual_port = get_port()
+    if _is_port_in_use(actual_port):
+        logger.warning(f"检测到端口 {actual_port} 已被占用，已有 X2MD 实例在运行")
+        msg = "X2MD 已在运行中！\n\n请在系统托盘找到 X2MD 图标。\n如需重启，请先从托盘退出再重新打开。"
+        if sys.platform == "win32":
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(0, msg, "X2MD", 0x40)
+        elif sys.platform == "darwin":
+            try:
+                subprocess.Popen(["osascript", "-e",
+                                  f'display dialog "{msg}" with title "X2MD" buttons {{"好"}} default button 1 with icon note'])
+            except Exception:
+                pass
+        logger.info("退出重复实例")
+        return
+
     # 确保 config 和 extension 在用户可访问的位置
     logger.info("[阶段 1/4] 检查配置文件...")
     ensure_config_accessible()
     logger.info("[阶段 2/4] 检查扩展文件夹...")
     ensure_extension_accessible()
 
-    # 首次运行：弹出设置向导（向导中包含"跳过设置"按钮）
-    # 跳过说明：
-    #   - 点击向导首页左下角的"跳过设置"按钮可直接使用默认配置启动
-    #   - 默认 Markdown 保存路径：桌面/X2MD/MD/
-    #   - 默认视频保存路径：桌面/X2MD/Videos/
-    #   - 默认端口：9527
-    #   - 跳过后可随时通过系统托盘菜单 →"打开设置向导"重新配置
+    # 首次运行：弹出设置向导
     logger.info("[阶段 3/4] 检查向导完成状态...")
     if not is_setup_completed():
-        logger.info("首次运行，启动设置向导（用户可选择跳过）...")
+        logger.info("首次运行，启动设置向导...")
         completed = run_setup_wizard()
         if not completed:
             logger.warning("设置向导被取消，将使用默认配置继续启动服务")
-            # 向导被关闭（非跳过），使用默认路径创建最小配置以允许服务启动
             _ensure_minimal_config()
         else:
             logger.info("设置向导已完成")

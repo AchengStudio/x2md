@@ -91,7 +91,7 @@ DEFAULT_CONFIG = {
     },
     # 图片下载到本地（V1.2 新增）
     "download_images": True,
-    "image_subfolder": "assets",
+    "image_subfolder": "媒体文件",
     # 微信视频号视频保存（默认关闭）
     "enable_wechat_video_channel": False,
     # 覆盖已有同源文件（默认关闭）
@@ -107,8 +107,35 @@ DEFAULT_CONFIG = {
     "discourse_domains": ["linux.do"],
     # 嵌入模式：iframe = 用 iframe 嵌入视频, local = 下载到本地引用
     "embed_mode": "local",
-    # 飞书一键复制解锁（默认开启）
-    "enable_copy_unlock": True,
+    # ── 多目标保存开关 ──
+    "save_to_obsidian": True,
+    "save_to_feishu": False,
+    "save_to_notion": False,
+    "export_html": False,
+    # ── 主题 ──
+    "theme": "light",
+    # ── 飞书配置 ──
+    "feishu_api_domain": "feishu",
+    "feishu_app_id": "",
+    "feishu_app_secret": "",
+    "feishu_app_token": "",
+    "feishu_table_id": "",
+    "feishu_upload_md": False,
+    "feishu_upload_html": False,
+    # ── Notion 配置 ──
+    "notion_token": "",
+    "notion_database_id": "",
+    "notion_prop_title": "标题",
+    "notion_prop_url": "链接",
+    "notion_prop_author": "作者",
+    "notion_prop_tags": "标签",
+    "notion_prop_saved_date": "保存日期",
+    "notion_prop_type": "类型",
+    "notion_prop_comment_count": "评论数",
+    # ── HTML 导出 ──
+    "html_export_folder": "X2MD导出",
+    # ── 复制解锁 ──
+    "enable_copy_unlock": False,
 }
 
 _log_handlers = [logging.FileHandler(os.path.join(APP_DIR, "x2md.log"), encoding="utf-8")]
@@ -128,7 +155,7 @@ logger = logging.getLogger("x2md_server")
 
 # 全局配置缓存和媒体下载线程池
 _config_cache: dict | None = None
-_config_lock = threading.Lock()
+_config_lock = threading.RLock()          # 可重入锁，允许嵌套调用 load_config/save_config
 _save_lock = threading.Lock()           # 保护文件写入，防止并发写冲突
 _media_executor = ThreadPoolExecutor(max_workers=5)
 
@@ -175,6 +202,28 @@ def save_config(cfg: dict):
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(cfg, f, ensure_ascii=False, indent=2)
         _config_cache = cfg
+
+
+def reload_config_from_disk():
+    """强制从磁盘重新加载配置（向导等外部进程修改 config.json 后调用）"""
+    global _config_cache
+    with _config_lock:
+        # 在同一个锁内清空并重新加载，避免竞态窗口
+        _config_cache = None
+        if os.path.exists(CONFIG_FILE):
+            try:
+                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                for k, v in DEFAULT_CONFIG.items():
+                    if k not in cfg:
+                        cfg[k] = v
+                _config_cache = cfg
+                logger.info(f"配置已从磁盘重新加载, save_paths={cfg.get('save_paths', [])}")
+                return cfg
+            except Exception as e:
+                logger.warning(f"重新加载配置失败: {e}")
+        _config_cache = copy.deepcopy(DEFAULT_CONFIG)
+        return _config_cache
 
 
 def normalize_image_url(url: str) -> str:
@@ -354,23 +403,6 @@ def _is_embeddable_video(url: str) -> bool:
     ])
 
 
-def _is_direct_video_url(url: str) -> bool:
-    """判断是否为直接视频文件 URL（.mp4/.webm/.mov 或 video.twimg.com）"""
-    if not url:
-        return False
-    lower = url.lower()
-    if any(lower.endswith(ext) or (ext + "?") in lower for ext in [".mp4", ".webm", ".mov"]):
-        return True
-    if "video.twimg.com" in lower:
-        return True
-    return False
-
-
-def _make_video_tag(url: str) -> str:
-    """为直接视频 URL 生成 HTML5 <video> 标签（Obsidian 兼容）"""
-    return f'\n<video src="{url}" controls width="560" height="315"></video>\n'
-
-
 def _make_video_iframe(url: str) -> str:
     """为可嵌入的视频 URL 生成 iframe HTML"""
     # YouTube
@@ -514,10 +546,6 @@ tags: {tags_yaml}
         # iframe 模式：YouTube/Bilibili 用 iframe 嵌入
         if embed_mode == "iframe" and _is_embeddable_video(vid_url):
             vid_map[vid_url] = _make_video_iframe(vid_url)
-            video_idx += 1
-        # iframe 模式：直接视频链接（.mp4/video.twimg.com 等）用 <video> 标签
-        elif embed_mode == "iframe" and _is_direct_video_url(vid_url):
-            vid_map[vid_url] = _make_video_tag(vid_url)
             video_idx += 1
         elif download_video:
             vid_filename = f"{filename}_video_{video_idx}.mp4"
@@ -717,15 +745,17 @@ class X2MDHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         """处理 CORS 预检请求"""
         self.send_response(200)
+        self.send_header("Connection", "close")
         self._send_cors_headers()
         self.end_headers()
+        self.close_connection = True
 
     def do_GET(self):
         path = urlparse(self.path).path
         logger.debug(f"GET {path} from {self.address_string()}")
 
         if path == "/ping":
-            self._respond(200, {"status": "ok", "version": "1.6.2"})
+            self._respond(200, {"status": "ok", "version": "1.6.3"})
 
         elif path == "/config":
             cfg = load_config()
@@ -832,8 +862,18 @@ class X2MDHandler(BaseHTTPRequestHandler):
                         img_dir = os.path.join(final_dir, subfolder)
                         download_image_async(img_url, img_dir, local_name)
                 if video_tasks:
+                    # 优先使用独立的 video_save_path，未配置则跟随 MD 保存目录
+                    video_base = cfg.get("video_save_path", "").strip()
+                    if video_base:
+                        # 独立视频目录也按平台分文件夹
+                        if enable_platform_folders:
+                            video_base_dir = os.path.join(video_base, folder_name) if enable_platform_folders else video_base
+                        else:
+                            video_base_dir = video_base
+                    else:
+                        video_base_dir = final_dir
                     for vid_url, subfolder, local_name in video_tasks:
-                        vid_dir = os.path.join(final_dir, subfolder)
+                        vid_dir = os.path.join(video_base_dir, subfolder)
                         download_video_async(vid_url, vid_dir, local_name)
 
             except Exception as e:
@@ -907,9 +947,11 @@ class X2MDHandler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Connection", "close")
         self._send_cors_headers()
         self.end_headers()
         self.wfile.write(body)
+        self.close_connection = True
 
 
 def main():

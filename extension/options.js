@@ -102,10 +102,8 @@ function loadConfig() {
             return;
         }
         if (resp && resp.success && resp.config) {
-            currentConfig = resp.config;
-            applyConfigToUI(resp.config);
-            // 同时写入本地缓存（备份）
-            saveConfigToLocal(resp.config);
+            // 服务在线，检查是否有离线期间待回写的配置
+            _tryWritebackPendingConfig(resp.config);
         } else {
             // 服务端无配置时尝试本地缓存
             loadConfigFromLocal();
@@ -113,9 +111,12 @@ function loadConfig() {
     });
 }
 
-function saveConfigToLocal(cfg) {
+function saveConfigToLocal(cfg, pending = false) {
     try {
-        chrome.storage.local.set({ x2md_config_backup: cfg });
+        const data = { x2md_config_backup: cfg };
+        if (pending) data.x2md_config_pending = true;
+        else data.x2md_config_pending = false;
+        chrome.storage.local.set(data);
     } catch (_) { /* 静默失败 */ }
 }
 
@@ -127,6 +128,33 @@ function loadConfigFromLocal() {
             showToast("已从本地缓存恢复设置（服务未连接）");
         } else {
             showToast("无法读取配置，请确认服务已启动", true);
+        }
+    });
+}
+
+// 服务恢复在线后，自动将离线期间修改的配置回写到 server
+function _tryWritebackPendingConfig(serverConfig) {
+    chrome.storage.local.get(["x2md_config_backup", "x2md_config_pending"], (result) => {
+        if (result.x2md_config_pending && result.x2md_config_backup) {
+            // 有待回写的离线配置，用离线版本覆盖服务端
+            const pendingCfg = result.x2md_config_backup;
+            chrome.runtime.sendMessage({ action: "update_config", config: pendingCfg }, (resp) => {
+                if (resp && resp.success) {
+                    currentConfig = pendingCfg;
+                    applyConfigToUI(pendingCfg);
+                    saveConfigToLocal(pendingCfg, false);  // 清除 pending 标记
+                    showToast("已将离线修改的设置同步到服务");
+                } else {
+                    // 回写失败，保持 pending，下次再试
+                    currentConfig = pendingCfg;
+                    applyConfigToUI(pendingCfg);
+                }
+            });
+        } else {
+            // 没有待回写的配置，正常使用服务端配置
+            currentConfig = serverConfig;
+            applyConfigToUI(serverConfig);
+            saveConfigToLocal(serverConfig);
         }
     });
 }
@@ -146,9 +174,14 @@ function resetAllConfig() {
 }
 
 function applyConfigToUI(cfg) {
-    // 主题：优先使用 localStorage（用户选择），其次才是 config.json
+    // 主题：DOMContentLoaded 已应用过视觉主题，这里只同步 select 下拉框显示
     const theme = localStorage.getItem("x2md_theme") || cfg.theme || "light";
-    applyTheme(theme);
+    const sel = document.getElementById("themeSelect");
+    if (sel) sel.value = theme;
+    // 仅在 localStorage 无缓存时才用 config.json 的值应用主题样式（避免闪烁）
+    if (!localStorage.getItem("x2md_theme") && cfg.theme) {
+        applyTheme(cfg.theme);
+    }
 
     // 服务设置
     document.getElementById("portInput").value = cfg.port || 9527;
@@ -203,7 +236,7 @@ function applyConfigToUI(cfg) {
 
     // 图片
     document.getElementById("downloadImages").checked = cfg.download_images !== false;
-    document.getElementById("imageSubfolder").value = cfg.image_subfolder || "assets";
+    document.getElementById("imageSubfolder").value = cfg.image_subfolder || "媒体文件";
 
     // 覆盖策略
     document.getElementById("overwriteExisting").checked = !!cfg.overwrite_existing;
@@ -398,13 +431,17 @@ function addPath() {
 function checkStatus() {
     const dot = document.getElementById("statusDot");
     const txt = document.getElementById("statusText");
-    dot.className = "status-dot offline";
+    // 只更新文字提示，不立即切换为 offline 红点（避免闪烁）
     txt.textContent = "检测中…";
     chrome.runtime.sendMessage({ action: "ping" }, (resp) => {
-        if (chrome.runtime.lastError) return;
+        if (chrome.runtime.lastError) {
+            dot.className = "status-dot offline";
+            txt.textContent = "服务未启动，请启动 X2MD 应用";
+            return;
+        }
         const online = resp && resp.online;
         dot.className = "status-dot " + (online ? "online" : "offline");
-        txt.textContent = online ? "本地服务运行中" : "服务未启动，请运行 start_server.sh";
+        txt.textContent = online ? "本地服务运行中" : "服务未启动，请启动 X2MD 应用";
     });
 }
 
@@ -617,7 +654,7 @@ function saveConfig() {
         platform_folder_names: platformFolderNames,
         // 图片
         download_images: document.getElementById("downloadImages").checked,
-        image_subfolder: document.getElementById("imageSubfolder").value.trim() || "assets",
+        image_subfolder: document.getElementById("imageSubfolder").value.trim() || "媒体文件",
         // 覆盖
         overwrite_existing: document.getElementById("overwriteExisting").checked,
         // 评论
@@ -644,9 +681,9 @@ function saveConfig() {
             updateSyncStatus(syncEnabled);
             showToast("设置已保存");
         } else {
-            // 即使服务不在线，也保存到本地
-            saveConfigToLocal(newConfig);
-            showToast("服务未连接，设置已保存到本地缓存", true);
+            // 即使服务不在线，也保存到本地，并标记为待回写
+            saveConfigToLocal(newConfig, true);
+            showToast("服务未连接，设置已保存到本地缓存（服务恢复后自动同步）", true);
         }
     });
 }
