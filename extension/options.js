@@ -6,7 +6,7 @@ let currentConfig = {};
 // ─── 初始化 ───
 document.addEventListener("DOMContentLoaded", () => {
     // 主题：立即应用（避免闪烁）
-    applyTheme(localStorage.getItem("x2md_theme") || "light");
+    applyTheme(localStorage.getItem("x2md_theme") || "dark");
 
     // 绑定按钮事件
     document.getElementById("btnRefresh").addEventListener("click", checkStatus);
@@ -62,7 +62,7 @@ function applyTheme(theme) {
 
 // 监听系统主题变化（仅 system 模式有效，CSS 自动处理，这里刷新 UI 即可）
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-    if ((localStorage.getItem("x2md_theme") || "light") === "system") {
+    if ((localStorage.getItem("x2md_theme") || "dark") === "system") {
         applyTheme("system");
     }
 });
@@ -147,7 +147,7 @@ function resetAllConfig() {
 
 function applyConfigToUI(cfg) {
     // 主题：优先使用 localStorage（用户选择），其次才是 config.json
-    const theme = localStorage.getItem("x2md_theme") || cfg.theme || "light";
+    const theme = localStorage.getItem("x2md_theme") || cfg.theme || "dark";
     applyTheme(theme);
 
     // 服务设置
