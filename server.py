@@ -809,8 +809,18 @@ class X2MDHandler(BaseHTTPRequestHandler):
                         img_dir = os.path.join(final_dir, subfolder)
                         download_image_async(img_url, img_dir, local_name)
                 if video_tasks:
+                    # 优先使用独立的 video_save_path，未配置则跟随 MD 保存目录
+                    video_base = cfg.get("video_save_path", "").strip()
+                    if video_base:
+                        # 独立视频目录也按平台分文件夹
+                        if enable_platform_folders:
+                            video_base_dir = os.path.join(video_base, folder_name) if enable_platform_folders else video_base
+                        else:
+                            video_base_dir = video_base
+                    else:
+                        video_base_dir = final_dir
                     for vid_url, subfolder, local_name in video_tasks:
-                        vid_dir = os.path.join(final_dir, subfolder)
+                        vid_dir = os.path.join(video_base_dir, subfolder)
                         download_video_async(vid_url, vid_dir, local_name)
 
             except Exception as e:
