@@ -329,8 +329,12 @@ function detectAndExtractArticle() {
 
     const extractedVideos = [];
 
-    // 合并相邻相同的视频占位符（避免 video 和 img 双触发产生重复）
-    article_content = article_content.replace(/(?:\[\[VIDEO_HOLDER_(\d+)\]\]\s*)+/g, '\n[[VIDEO_HOLDER_$1]]\n');
+    // 合并相邻相同ID的视频占位符（避免 video 和 img 双触发产生重复，但保留不同ID）
+    article_content = article_content.replace(/(\[\[VIDEO_HOLDER_(\d+)\]\]\s*)+/g, (match, _, lastId) => {
+        // 提取所有唯一ID
+        const ids = [...new Set(Array.from(match.matchAll(/VIDEO_HOLDER_(\d+)/g), m => m[1]))];
+        return '\n' + ids.map(id => `[[VIDEO_HOLDER_${id}]]`).join('\n') + '\n';
+    });
 
     article_content = article_content.replace(/\[\[VIDEO_HOLDER_(\d+)\]\]/g, (match, mediaId) => {
         const urls = videoMap[mediaId];
@@ -989,6 +993,10 @@ function sendToBackground(data) {
             showToast(yes ? "指令已下达，正在连同长视频一并下载..." : "视频已剥离，正在光速脱水图文...");
 
             chrome.runtime.sendMessage({ action: "force_save_tweet", data: resp.payload }, (finalResp) => {
+                if (chrome.runtime.lastError) {
+                    showToast("保存失败：扩展通信错误", "error", 5000);
+                    return;
+                }
                 handleSaveResponse(finalResp);
             });
             return;

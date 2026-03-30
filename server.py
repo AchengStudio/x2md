@@ -449,16 +449,20 @@ def build_markdown(data: dict, cfg: dict) -> tuple[str, str, list, list]:
     title = title.replace('"', "'")
 
     author_url = data.get("author_url") or ""
-    if not author_url and handle:
+    if not author_url and handle and platform in ("Twitter/X", "twitter"):
         author_url = f"https://x.com/{handle.lstrip('@')}"
 
     tags_yaml = "[" + ", ".join(f'"{t}"' for t in all_tags) + "]" if all_tags else "[]"
 
+    # 转义 YAML 值中的双引号，防止 front matter 被破坏
+    safe_url = url.replace('"', '\\"')
+    safe_author_url = author_url.replace('"', '\\"')
+
     front_matter = f"""---
 标题: "{title}"
 tags: {tags_yaml}
-源: "{url}"
-作者主页: "{author_url}"
+源: "{safe_url}"
+作者主页: "{safe_author_url}"
 创建时间: "{datetime_str}"
 发布时间: "{published}"
 平台: "{platform}"

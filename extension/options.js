@@ -423,6 +423,7 @@ function testFeishuConnection() {
     if (!appId || !appSecret) {
         statusEl.className = "status-msg error";
         statusEl.textContent = "请填写 App ID 和 App Secret";
+        statusEl.style.display = "block";
         return;
     }
 
@@ -486,6 +487,7 @@ function testNotionConnection() {
     if (!token || !dbId) {
         statusEl.className = "status-msg error";
         statusEl.textContent = "请填写 Token 和 Database ID";
+        statusEl.style.display = "block";
         return;
     }
 
@@ -521,6 +523,7 @@ function testNotionConnection() {
             statusEl.className = "status-msg error";
             statusEl.textContent = "连接失败：" + (resp?.error || "未知错误");
         }
+        statusEl.style.display = "block";
     });
 }
 

@@ -139,6 +139,14 @@
             const poster = safeGetAttribute(element, "poster") || "";
             const match = poster.match(/(?:video_thumb|tweet_video_thumb|amplify_video_thumb)\/(\d+)\//);
             if (match) return `\n[[VIDEO_HOLDER_${match[1]}]]\n`;
+            // 无 poster 时尝试从 src/source 获取视频链接作为 markdown 链接
+            const videoSrc = safeGetAttribute(element, "src") || "";
+            if (videoSrc) return `\n[视频](${videoSrc})\n`;
+            const sourceEl = element.querySelector("source");
+            if (sourceEl) {
+                const sourceSrc = safeGetAttribute(sourceEl, "src") || "";
+                if (sourceSrc) return `\n[视频](${sourceSrc})\n`;
+            }
         }
 
         if (tag === "img") {

@@ -42,10 +42,11 @@
         try {
             const parsed = new URL(raw);
             if (parsed.hostname.includes("mmbiz")) {
-                const wxFmt = parsed.searchParams.get("wx_fmt") || parsed.searchParams.get("tp");
-                const newParams = new URLSearchParams();
-                if (wxFmt) newParams.set("wx_fmt", wxFmt);
-                parsed.search = newParams.toString() ? "?" + newParams.toString() : "";
+                // 保留格式参数和可能的认证参数，只清除明确的追踪参数
+                const trackingParams = ["chksm", "scene", "subscene", "mid", "idx", "sn", "key", "pass_ticket"];
+                for (const p of trackingParams) {
+                    parsed.searchParams.delete(p);
+                }
                 return parsed.href;
             }
         } catch (error) { }

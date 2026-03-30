@@ -44,10 +44,14 @@ const SYNC_FIELDS = [
     "enable_copy_unlock",
 ];
 
-// 从本地存储恢复用户自定义端口
-chrome.storage.local.get("x2md_port", (data) => {
-    if (data.x2md_port) SERVER_BASE = `http://127.0.0.1:${data.x2md_port}`;
+// 从本地存储恢复用户自定义端口（使用 Promise 避免竞态）
+const _serverBaseReady = new Promise((resolve) => {
+    chrome.storage.local.get("x2md_port", (data) => {
+        if (data.x2md_port) SERVER_BASE = `http://127.0.0.1:${data.x2md_port}`;
+        resolve(SERVER_BASE);
+    });
 });
+async function getServerBase() { await _serverBaseReady; return SERVER_BASE; }
 
 // ── 高性能缓存层（Cache-First + Background Revalidate）──────────
 // MV3 Service Worker 生命周期短暂，内存缓存易丢失，使用 chrome.storage.local 持久化
@@ -78,7 +82,8 @@ async function getCachedConfig() {
 
 async function refreshConfigCache() {
     try {
-        const resp = await fetch(`${SERVER_BASE}/config`, { signal: AbortSignal.timeout(3000) });
+        const base = await getServerBase();
+        const resp = await fetch(`${base}/config`, { signal: AbortSignal.timeout(3000) });
         if (resp.ok) {
             const data = await resp.json();
             const now = Date.now();
@@ -133,7 +138,7 @@ async function registerDiscourseContentScripts(domains) {
     try {
         const cfg = await getCachedConfig();
         if (cfg && cfg.discourse_domains) {
-            registerDiscourseContentScripts(cfg.discourse_domains);
+            await registerDiscourseContentScripts(cfg.discourse_domains);
         }
     } catch { /* 服务未启动，跳过 */ }
 })();
@@ -1618,7 +1623,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.action === "save_tweet") {
         (async () => {
-            const serverBase = SERVER_BASE;   // 快照，防止并发修改
+            const serverBase = await getServerBase();   // 等待端口初始化完成
             // 分阶段超时保护：MV3 service worker 可能在空闲30s后被杀
             // 各阶段有独立超时（fetchFullTweetData/fetchNoteContent/dispatchMultiTargetSave 内部已有）
             // 这里的总超时作为兜底，防止 callback 永远不返回
@@ -1832,7 +1837,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.action === "force_save_tweet") {
         (async () => {
-            const serverBase = SERVER_BASE;   // 快照
+            const serverBase = await getServerBase();   // 等待端口初始化完成
+            const OVERALL_TIMEOUT = 90000;
+            let _responded = false;
+            function safeSendResponse(data) {
+                if (_responded) return;
+                _responded = true;
+                clearTimeout(timeoutId);
+                sendResponse(data);
+            }
+            const timeoutId = setTimeout(() => {
+                console.error("[x2md] force_save_tweet 整体超时（90s）");
+                safeSendResponse({ success: false, error: "操作超时，请检查网络连接和本地服务是否正常运行" });
+            }, OVERALL_TIMEOUT);
             try {
                 const data = message.data;
 
@@ -1851,9 +1868,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
                 // 多目标保存分发（与 save_tweet 一致，由共享函数自行获取配置）
                 const dispatchResult = await dispatchMultiTargetSave(data, serverBase);
-                sendResponse(dispatchResult);
+                safeSendResponse(dispatchResult);
             } catch (err) {
-                sendResponse({ success: false, error: err.message || String(err) });
+                safeSendResponse({ success: false, error: err.message || String(err) });
             }
         })();
         return true;
@@ -1888,7 +1905,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.action === "update_config") {
         (async () => {
-            const serverBase = SERVER_BASE;   // 快照
+            const serverBase = await getServerBase();   // 等待端口初始化完成
             try {
                 const resp = await fetch(`${serverBase}/config`, {
                     method: "POST",
@@ -1929,7 +1946,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === "reset_config") {
         (async () => {
             try {
-                const resp = await fetch(`${SERVER_BASE}/config/reset`, { method: "POST", signal: AbortSignal.timeout(3000) });
+                const base = await getServerBase();
+                const resp = await fetch(`${base}/config/reset`, { method: "POST", signal: AbortSignal.timeout(3000) });
                 const json = await resp.json();
                 await chrome.storage.sync.remove("x2md_sync").catch(() => {});
                 invalidateConfigCache();
@@ -1955,7 +1973,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.action === "ping") {
         (async () => {
-            const serverBase = SERVER_BASE;   // 快照
+            const serverBase = await getServerBase();   // 等待端口初始化完成
             try {
                 const resp = await fetch(`${serverBase}/ping`, {
                     signal: AbortSignal.timeout(2000)
