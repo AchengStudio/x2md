@@ -702,7 +702,7 @@ class X2MDHandler(BaseHTTPRequestHandler):
         logger.debug(f"GET {path} from {self.address_string()}")
 
         if path == "/ping":
-            self._respond(200, {"status": "ok", "version": "1.6.1"})
+            self._respond(200, {"status": "ok", "version": "1.6.2"})
 
         elif path == "/config":
             cfg = load_config()
