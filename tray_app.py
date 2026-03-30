@@ -507,6 +507,49 @@ def _merge_config_defaults():
         logger.warning(f"合并配置默认值失败: {e}")
 
 
+# 当前配置版本号，升级时递增以触发迁移逻辑
+CONFIG_VERSION = 2  # v1.6.2: 强制重跑向导 + assets→媒体文件
+
+
+def _upgrade_config():
+    """版本升级时的配置迁移逻辑。
+    通过 config_version 字段判断是否需要执行迁移。"""
+    if not os.path.isfile(CONFIG_FILE):
+        return
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+
+        old_version = cfg.get("config_version", 0)
+        if old_version >= CONFIG_VERSION:
+            return  # 已是最新，无需迁移
+
+        changed = False
+
+        # === 迁移到 config_version 2（v1.6.2）===
+        if old_version < 2:
+            # 1) assets → 媒体文件
+            if cfg.get("image_subfolder") == "assets":
+                cfg["image_subfolder"] = "媒体文件"
+                logger.info("升级迁移: image_subfolder 从 'assets' 改为 '媒体文件'")
+
+            # 2) 强制重跑向导（让用户确认新的路径设置）
+            cfg["setup_completed"] = False
+            logger.info("升级迁移: 重置 setup_completed，用户需重新确认路径设置")
+            changed = True
+
+        # 更新版本号
+        cfg["config_version"] = CONFIG_VERSION
+        changed = True
+
+        if changed:
+            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, ensure_ascii=False, indent=2)
+            logger.info(f"配置已升级到 config_version={CONFIG_VERSION}")
+    except Exception as e:
+        logger.warning(f"配置升级失败: {e}")
+
+
 def ensure_config_accessible():
     """确保 config.json 在 APP_DIR（可写位置），打包后首次运行时从资源目录复制。
     同时迁移旧版本遗留在 app 包内的配置。升级时自动补全新增字段。"""
@@ -514,6 +557,8 @@ def ensure_config_accessible():
     if os.path.exists(CONFIG_FILE):
         # 已有配置：合并新版本可能新增的默认字段
         _merge_config_defaults()
+        # 执行版本升级迁移
+        _upgrade_config()
         return
 
     # 优先迁移旧版遗留在 MacOS/ 目录内的配置（用户升级场景）

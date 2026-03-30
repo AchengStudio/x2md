@@ -52,5 +52,6 @@
   "notion_prop_type": "类型",
   "html_export_folder": "X2MD导出",
   "theme": "light",
-  "notion_prop_comment_count": "评论数"
+  "notion_prop_comment_count": "评论数",
+  "config_version": 2
 }
