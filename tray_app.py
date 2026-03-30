@@ -145,7 +145,10 @@ logger.info("=" * 60)
 
 
 def is_setup_completed() -> bool:
-    """检查是否已完成向导设置"""
+    """检查是否已完成向导设置
+    除了检查 setup_completed 标志，还检查 save_paths 是否为空。
+    如果 save_paths 为空，说明用户从未配置过保存路径，应重新弹出向导。
+    """
     logger.debug(f"检查向导完成状态, CONFIG_FILE={CONFIG_FILE}, 存在={os.path.exists(CONFIG_FILE)}")
     if not os.path.exists(CONFIG_FILE):
         logger.info("配置文件不存在，向导未完成")
@@ -154,7 +157,11 @@ def is_setup_completed() -> bool:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             cfg = json.load(f)
             completed = cfg.get("setup_completed", False)
-            logger.debug(f"setup_completed={completed}")
+            save_paths = cfg.get("save_paths", [])
+            logger.debug(f"setup_completed={completed}, save_paths={save_paths}")
+            if completed and not save_paths:
+                logger.info("setup_completed=true 但 save_paths 为空，视为未完成向导")
+                return False
             return completed
     except Exception as e:
         logger.warning(f"读取配置文件失败: {e}")
