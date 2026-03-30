@@ -849,6 +849,7 @@ class X2MDHandler(BaseHTTPRequestHandler):
         "notion_token", "notion_database_id",
         "notion_prop_title", "notion_prop_url", "notion_prop_author",
         "notion_prop_tags", "notion_prop_saved_date", "notion_prop_type",
+        "notion_prop_comment_count",
         # HTML 导出
         "html_export_folder",
         # 飞书一键复制
