@@ -226,6 +226,8 @@ class SetupWizard:
                      fg=C["text"], bg=C["surface"], anchor="w").pack(
                 fill="x", padx=18, pady=7)
 
+        self._make_btn(self.button_frame, "跳过设置 ▸",
+                       self._skip_wizard, "secondary").pack(side="left")
         self._make_btn(self.button_frame, "开始设置 →",
                        lambda: self._show_step(1)).pack(side="right")
 
@@ -398,6 +400,59 @@ class SetupWizard:
                        lambda: self._show_step(2), "secondary").pack(side="left")
         self._make_btn(self.button_frame, "🚀 启动服务",
                        self._finish, "success").pack(side="right")
+
+    # ── 跳过向导（使用默认配置） ──────────────────
+    def _skip_wizard(self):
+        """跳过设置向导，使用默认配置直接启动服务。
+
+        说明：
+        - Markdown 文件默认保存到：桌面/X2MD/MD/
+        - 视频文件默认保存到：桌面/X2MD/Videos/
+        - 服务端口默认为 9527
+        - 以上设置可随时通过系统托盘菜单 → "打开设置向导" 重新配置
+        - 文件夹不存在时会自动创建
+        """
+        logger.info("用户选择跳过向导，使用默认配置")
+
+        md = DEFAULT_MD_PATH
+        vid = DEFAULT_VIDEO_PATH
+
+        try:
+            os.makedirs(md, exist_ok=True)
+        except Exception as e:
+            logger.error(f"创建默认 Markdown 目录失败: {md}, 错误: {e}")
+        try:
+            os.makedirs(vid, exist_ok=True)
+        except Exception as e:
+            logger.error(f"创建默认视频目录失败: {vid}, 错误: {e}")
+
+        config = {}
+        if os.path.exists(CONFIG_FILE):
+            try:
+                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+            except Exception:
+                pass
+
+        config.update({
+            "port": config.get("port", 9527),
+            "save_paths": [md],
+            "filename_format": config.get("filename_format", "{summary}"),
+            "max_filename_length": config.get("max_filename_length", 60),
+            "video_save_path": vid,
+            "setup_completed": True,
+        })
+
+        try:
+            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                json.dump(config, f, ensure_ascii=False, indent=2)
+            logger.info(f"默认配置已保存到: {CONFIG_FILE}")
+        except Exception as e:
+            logger.error(f"保存默认配置失败: {e}")
+
+        self.completed = True
+        self.root.destroy()
+        logger.info("向导已跳过，使用默认配置启动")
 
     # ── 完成逻辑 ──────────────────────────────────
     def _finish(self):

@@ -63,6 +63,8 @@
         if (/^\/mindnotes\/[^/]+/.test(pathname)) return "mindnotes";
         if (/^\/docs\/[^/]+/.test(pathname)) return "docs";  // 旧版飞书文档
         if (/^\/drive\/[^/]+/.test(pathname)) return "drive";
+        if (/^\/base\/[^/]+/.test(pathname)) return "base";
+        if (/^\/slides\/[^/]+/.test(pathname)) return "slides";
         if (/^\/messenger\b/.test(pathname)) return "messenger";
 
         return null;

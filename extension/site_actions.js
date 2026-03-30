@@ -28,7 +28,9 @@
         if ((hostname.endsWith(".feishu.cn") || hostname.endsWith(".larksuite.com")) &&
             (/^\/wiki\/[^/]+/.test(pathname) || /^\/docx\/[^/]+/.test(pathname) ||
              /^\/docs\/[^/]+/.test(pathname) || /^\/minutes\/[^/]+/.test(pathname) ||
-             /^\/sheets\/[^/]+/.test(pathname) || /^\/mindnotes\/[^/]+/.test(pathname))) {
+             /^\/sheets\/[^/]+/.test(pathname) || /^\/mindnotes\/[^/]+/.test(pathname) ||
+             /^\/drive\/[^/]+/.test(pathname) || /^\/base\/[^/]+/.test(pathname) ||
+             /^\/slides\/[^/]+/.test(pathname))) {
             return "feishu";
         }
 

@@ -1525,6 +1525,11 @@ async function dispatchMultiTargetSave(data, serverBase, existingCfg = null) {
         } catch {}
     }
 
+    // Discourse 评论绕过修复：当 enable_comments=false 时，删除 content.js 直接注入的 comments
+    if (!cfg.enable_comments && data.comments) {
+        delete data.comments;
+    }
+
     const saveResults = [];
     const saveToObsidian = cfg.save_to_obsidian !== false;
     const saveToFeishu = !!cfg.save_to_feishu;

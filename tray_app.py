@@ -508,6 +508,39 @@ def ensure_config_accessible():
         logger.info(f"已将默认配置复制到: {CONFIG_FILE}")
 
 
+def _ensure_minimal_config():
+    """当用户关闭向导（未完成也未跳过）时，创建最小配置以允许服务启动。
+    默认保存路径：桌面/X2MD/MD/，视频路径：桌面/X2MD/Videos/，端口 9527。
+    用户稍后可通过托盘菜单重新运行向导来修改这些设置。"""
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+                if cfg.get("setup_completed"):
+                    return  # 已有完整配置
+        except Exception:
+            pass
+
+    home = os.path.expanduser("~")
+    md_path = os.path.join(home, "Desktop", "X2MD", "MD")
+    vid_path = os.path.join(home, "Desktop", "X2MD", "Videos")
+
+    try:
+        os.makedirs(md_path, exist_ok=True)
+        os.makedirs(vid_path, exist_ok=True)
+    except Exception as e:
+        logger.warning(f"创建默认目录失败: {e}")
+
+    config = {"port": 9527, "save_paths": [md_path], "video_save_path": vid_path,
+              "filename_format": "{summary}", "max_filename_length": 60, "setup_completed": True}
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+        logger.info(f"已创建最小默认配置: {CONFIG_FILE}")
+    except Exception as e:
+        logger.error(f"创建默认配置失败: {e}")
+
+
 def main():
     logger.info("main() 开始执行")
     logger.info(f"切换工作目录到 APP_DIR: {APP_DIR}")
@@ -525,14 +558,21 @@ def main():
     logger.info("[阶段 2/4] 检查扩展文件夹...")
     ensure_extension_accessible()
 
-    # 首次运行：弹出设置向导
+    # 首次运行：弹出设置向导（向导中包含"跳过设置"按钮）
+    # 跳过说明：
+    #   - 点击向导首页左下角的"跳过设置"按钮可直接使用默认配置启动
+    #   - 默认 Markdown 保存路径：桌面/X2MD/MD/
+    #   - 默认视频保存路径：桌面/X2MD/Videos/
+    #   - 默认端口：9527
+    #   - 跳过后可随时通过系统托盘菜单 →"打开设置向导"重新配置
     logger.info("[阶段 3/4] 检查向导完成状态...")
     if not is_setup_completed():
-        logger.info("首次运行，启动设置向导...")
+        logger.info("首次运行，启动设置向导（用户可选择跳过）...")
         completed = run_setup_wizard()
         if not completed:
-            logger.warning("设置向导被取消或失败，将继续启动服务（无配置）")
-            # 注意：不退出，继续启动服务。用户稍后可从托盘菜单重新运行向导
+            logger.warning("设置向导被取消，将使用默认配置继续启动服务")
+            # 向导被关闭（非跳过），使用默认路径创建最小配置以允许服务启动
+            _ensure_minimal_config()
         else:
             logger.info("设置向导已完成")
     else:

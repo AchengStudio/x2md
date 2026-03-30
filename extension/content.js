@@ -1365,16 +1365,21 @@ function postProcessMarkdownForClipboard(md, pageUrl) {
         if (src) videoUrls.add(src);
     });
 
-    // 将页面视频 URL 追加为 iframe（使用固定像素宽度，OB 兼容性更好）
+    // 将页面视频 URL 追加为 OB 兼容的标签（直接视频用 <video>，其他用 <iframe>）
     for (const vUrl of videoUrls) {
         if (!md.includes(vUrl)) {
-            md += `\n\n<iframe src="${vUrl}" width="640" height="360" frameborder="0" allowfullscreen></iframe>\n`;
+            const isDirectVideo = /\.(mp4|webm|mov)(\?|$)/i.test(vUrl) || vUrl.includes("video.twimg.com");
+            if (isDirectVideo) {
+                md += `\n\n<video src="${vUrl}" controls width="640" height="360"></video>\n`;
+            } else {
+                md += `\n\n<iframe src="${vUrl}" width="640" height="360" frameborder="0" allowfullscreen></iframe>\n`;
+            }
         }
     }
 
-    // 3. 将已有的裸视频链接转为 iframe
+    // 3. 将已有的裸视频链接转为 <video> 标签（OB 兼容）
     md = md.replace(/(?:^|\n)(https?:\/\/[^\s]+\.mp4[^\s]*)(?:\n|$)/gm, (match, url) => {
-        return `\n<iframe src="${url}" width="640" height="360" frameborder="0" allowfullscreen></iframe>\n`;
+        return `\n<video src="${url}" controls width="640" height="360"></video>\n`;
     });
 
     return md;

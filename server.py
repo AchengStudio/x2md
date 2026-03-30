@@ -107,6 +107,8 @@ DEFAULT_CONFIG = {
     "discourse_domains": ["linux.do"],
     # 嵌入模式：iframe = 用 iframe 嵌入视频, local = 下载到本地引用
     "embed_mode": "local",
+    # 飞书一键复制解锁（默认开启）
+    "enable_copy_unlock": True,
 }
 
 _log_handlers = [logging.FileHandler(os.path.join(APP_DIR, "x2md.log"), encoding="utf-8")]
@@ -352,6 +354,23 @@ def _is_embeddable_video(url: str) -> bool:
     ])
 
 
+def _is_direct_video_url(url: str) -> bool:
+    """判断是否为直接视频文件 URL（.mp4/.webm/.mov 或 video.twimg.com）"""
+    if not url:
+        return False
+    lower = url.lower()
+    if any(lower.endswith(ext) or (ext + "?") in lower for ext in [".mp4", ".webm", ".mov"]):
+        return True
+    if "video.twimg.com" in lower:
+        return True
+    return False
+
+
+def _make_video_tag(url: str) -> str:
+    """为直接视频 URL 生成 HTML5 <video> 标签（Obsidian 兼容）"""
+    return f'\n<video src="{url}" controls width="560" height="315"></video>\n'
+
+
 def _make_video_iframe(url: str) -> str:
     """为可嵌入的视频 URL 生成 iframe HTML"""
     # YouTube
@@ -495,6 +514,10 @@ tags: {tags_yaml}
         # iframe 模式：YouTube/Bilibili 用 iframe 嵌入
         if embed_mode == "iframe" and _is_embeddable_video(vid_url):
             vid_map[vid_url] = _make_video_iframe(vid_url)
+            video_idx += 1
+        # iframe 模式：直接视频链接（.mp4/video.twimg.com 等）用 <video> 标签
+        elif embed_mode == "iframe" and _is_direct_video_url(vid_url):
+            vid_map[vid_url] = _make_video_tag(vid_url)
             video_idx += 1
         elif download_video:
             vid_filename = f"{filename}_video_{video_idx}.mp4"
