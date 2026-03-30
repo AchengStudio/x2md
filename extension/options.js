@@ -102,10 +102,8 @@ function loadConfig() {
             return;
         }
         if (resp && resp.success && resp.config) {
-            currentConfig = resp.config;
-            applyConfigToUI(resp.config);
-            // 同时写入本地缓存（备份）
-            saveConfigToLocal(resp.config);
+            // 服务在线，检查是否有离线期间待回写的配置
+            _tryWritebackPendingConfig(resp.config);
         } else {
             // 服务端无配置时尝试本地缓存
             loadConfigFromLocal();
@@ -113,9 +111,12 @@ function loadConfig() {
     });
 }
 
-function saveConfigToLocal(cfg) {
+function saveConfigToLocal(cfg, pending = false) {
     try {
-        chrome.storage.local.set({ x2md_config_backup: cfg });
+        const data = { x2md_config_backup: cfg };
+        if (pending) data.x2md_config_pending = true;
+        else data.x2md_config_pending = false;
+        chrome.storage.local.set(data);
     } catch (_) { /* 静默失败 */ }
 }
 
@@ -127,6 +128,33 @@ function loadConfigFromLocal() {
             showToast("已从本地缓存恢复设置（服务未连接）");
         } else {
             showToast("无法读取配置，请确认服务已启动", true);
+        }
+    });
+}
+
+// 服务恢复在线后，自动将离线期间修改的配置回写到 server
+function _tryWritebackPendingConfig(serverConfig) {
+    chrome.storage.local.get(["x2md_config_backup", "x2md_config_pending"], (result) => {
+        if (result.x2md_config_pending && result.x2md_config_backup) {
+            // 有待回写的离线配置，用离线版本覆盖服务端
+            const pendingCfg = result.x2md_config_backup;
+            chrome.runtime.sendMessage({ action: "update_config", config: pendingCfg }, (resp) => {
+                if (resp && resp.success) {
+                    currentConfig = pendingCfg;
+                    applyConfigToUI(pendingCfg);
+                    saveConfigToLocal(pendingCfg, false);  // 清除 pending 标记
+                    showToast("已将离线修改的设置同步到服务");
+                } else {
+                    // 回写失败，保持 pending，下次再试
+                    currentConfig = pendingCfg;
+                    applyConfigToUI(pendingCfg);
+                }
+            });
+        } else {
+            // 没有待回写的配置，正常使用服务端配置
+            currentConfig = serverConfig;
+            applyConfigToUI(serverConfig);
+            saveConfigToLocal(serverConfig);
         }
     });
 }
@@ -644,9 +672,9 @@ function saveConfig() {
             updateSyncStatus(syncEnabled);
             showToast("设置已保存");
         } else {
-            // 即使服务不在线，也保存到本地
-            saveConfigToLocal(newConfig);
-            showToast("服务未连接，设置已保存到本地缓存", true);
+            // 即使服务不在线，也保存到本地，并标记为待回写
+            saveConfigToLocal(newConfig, true);
+            showToast("服务未连接，设置已保存到本地缓存（服务恢复后自动同步）", true);
         }
     });
 }
