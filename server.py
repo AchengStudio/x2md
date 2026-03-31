@@ -452,10 +452,15 @@ def build_markdown(data: dict, cfg: dict) -> tuple[str, str, list, list]:
             )
 
     # 标签：优先使用平台提供的 tags，其次使用 hashtags（Twitter）
-    raw_tags = data.get("tags", []) or []
-    raw_hashtags = data.get("hashtags", []) or []
-    # 合并去重
-    all_tags = list(dict.fromkeys(raw_tags + raw_hashtags))
+    # Discourse API 可能返回 dict 列表（如 {"name":"tag"}），需统一为字符串
+    def _to_str_tag(t):
+        if isinstance(t, dict):
+            return str(t.get("name", t.get("id", "")))
+        return str(t) if t else ""
+    raw_tags = [_to_str_tag(t) for t in (data.get("tags", []) or []) if t]
+    raw_hashtags = [_to_str_tag(t) for t in (data.get("hashtags", []) or []) if t]
+    # 合并去重（过滤空字符串）
+    all_tags = list(dict.fromkeys(t for t in raw_tags + raw_hashtags if t))
 
     now = datetime.now(BEIJING_TZ)
     date_str = now.strftime("%Y-%m-%d")
