@@ -1392,48 +1392,94 @@ function bindAllDebounced() {
     }, 200);
 }
 
-// Discourse 点赞按钮：单击 = 保存到 OB（拦截点赞），双击 = 正常点赞（不保存）
-// 使用 per-post 追踪代替全局标志，避免多帖子并发操作时标志竞态
-const _likePassThroughSet = new WeakSet(); // 记录正在放行的按钮
-const _likePendingClicks = new WeakMap();  // btn → { count, timer }
+// ── Discourse 点赞按钮拦截（Isolated World capture 阶段）──────────
+// 参考上游 discourse-saver 对链接按钮的拦截方式：
+//   document capture 阶段拦截 → preventDefault + stopImmediatePropagation
+//   单击 = 保存，双击 = 放行原生点赞
+(function initLikeIntercept() {
+    // 仅在 Discourse 域名上启用，避免误拦截其他站点
+    const domains = (typeof getDiscourseDomains === "function" ? getDiscourseDomains() : ["linux.do"]);
+    if (!domains.includes(location.hostname.toLowerCase())) return;
 
-document.addEventListener("click", (event) => {
-    if (!isDiscourseTopicPage()) return;
-    const btn = event.target?.closest?.(LINUX_DO_LIKE_SELECTOR);
-    if (!btn) return;
+    const LIKE_SELECTOR = "button.btn-toggle-reaction-like.reaction-button";
+    const DOUBLE_CLICK_DELAY = 350;
+    const BYPASS_ATTR = "data-x2md-like-bypass";
 
-    // 放行标记：双击重放的点击不拦截（per-button）
-    if (_likePassThroughSet.has(btn)) {
-        _likePassThroughSet.delete(btn);
-        return;
+    let likeClickCount = 0;
+    let likeClickTimer = null;
+    let lastLikePostId = null;
+
+    function isLikeButton(el) {
+        if (!el) return null;
+        const btn = el.closest(LIKE_SELECTOR);
+        if (!btn) return null;
+        const article = btn.closest("article[data-post-id]");
+        return article ? { btn, postId: article.getAttribute("data-post-id") } : { btn, postId: "" };
     }
 
-    // 拦截本次点击
-    event.preventDefault();
-    event.stopPropagation();
+    document.addEventListener("click", function (e) {
+        const info = isLikeButton(e.target);
+        if (!info) return;
 
-    let pending = _likePendingClicks.get(btn);
-    if (!pending) {
-        pending = { count: 0, timer: null };
-        _likePendingClicks.set(btn, pending);
-    }
-    pending.count++;
-
-    clearTimeout(pending.timer);
-    pending.timer = setTimeout(() => {
-        const clicks = pending.count;
-        _likePendingClicks.delete(btn);
-
-        if (clicks >= 2) {
-            // 双击：恢复点赞，不保存
-            _likePassThroughSet.add(btn);
-            btn.click();
-        } else {
-            // 单击：保存到 OB，不点赞
-            captureLinuxDoPost(btn);
+        // 双击放行时的合成点击，跳过拦截
+        if (info.btn.hasAttribute(BYPASS_ATTR)) {
+            info.btn.removeAttribute(BYPASS_ATTR);
+            return;
         }
-    }, 300);
-}, true);
+
+        // 拦截原生行为
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        const isSame = lastLikePostId === info.postId;
+        if (isSame) {
+            likeClickCount++;
+        } else {
+            likeClickCount = 1;
+        }
+        lastLikePostId = info.postId;
+
+        if (likeClickTimer) clearTimeout(likeClickTimer);
+
+        if (likeClickCount >= 2 && isSame) {
+            // 双击 → 放行原生点赞
+            likeClickCount = 0;
+            likeClickTimer = null;
+            info.btn.setAttribute(BYPASS_ATTR, "1");
+            const syntheticClick = new MouseEvent("click", {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+            });
+            info.btn.dispatchEvent(syntheticClick);
+            setTimeout(() => {
+                if (document.contains(info.btn)) {
+                    info.btn.removeAttribute(BYPASS_ATTR);
+                }
+            }, 100);
+        } else {
+            // 单击 → 等待超时后保存
+            likeClickTimer = setTimeout(() => {
+                if (likeClickCount === 1) {
+                    debugLog("[x2md-like] 单击保存, postId:", info.postId);
+                    if (info.postId) {
+                        const article = document.querySelector(`article[data-post-id="${info.postId}"]`);
+                        if (article) {
+                            captureLinuxDoPostElement(article);
+                        } else {
+                            captureLinuxDoPostElement(findCurrentLinuxDoPost());
+                        }
+                    } else {
+                        captureLinuxDoPostElement(findCurrentLinuxDoPost());
+                    }
+                }
+                likeClickCount = 0;
+                likeClickTimer = null;
+            }, DOUBLE_CLICK_DELAY);
+        }
+    }, true); // capture 阶段，最先执行
+})();
 
 const observer = new MutationObserver(bindAllDebounced);
 observer.observe(document.body, { childList: true, subtree: true });

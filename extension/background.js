@@ -142,6 +142,8 @@ async function registerDiscourseContentScripts(domains) {
         }
     } catch { /* 服务未启动，跳过 */ }
 })();
+
+// 点赞拦截已移至 content.js（Isolated World capture 阶段），不再需要 MAIN world 注入
 const GRAPHQL_DISCOVERY_CACHE = new Map();
 const _graphqlInflight = new Map();   // 防止并发重复请求同一 origin
 
