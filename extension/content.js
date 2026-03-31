@@ -487,9 +487,10 @@ async function captureLinuxDoPostElement(post) {
         document.querySelector("h1")?.innerText?.trim() ||
         document.title.replace(/\s*-\s*LINUX DO.*$/, "").trim();
 
-    // 始终提取主帖内容（#1）
-    const mainPost = document.getElementById("post_1") || document.querySelector("article[data-post-id]");
-    const data = extractLinuxDoPostData(mainPost, {
+    // 优先提取主帖内容（#1），如果主帖不在 DOM 中（虚拟滚动已回收），则提取当前点击的帖子
+    const mainPost = document.getElementById("post_1");
+    const extractTarget = mainPost || post;
+    const data = extractLinuxDoPostData(extractTarget, {
         pageUrl: location.href,
         topicTitle,
     });
@@ -1505,10 +1506,10 @@ function bindAllDebounced() {
             clickTimer = setTimeout(() => {
                 if (clickCount === 1) {
                     debugLog("[x2md-link] 单击保存, 楼层:", pn);
-                    // 找到对应帖子元素
+                    // 找到对应帖子元素（优先精确匹配楼层，fallback 用按钮自身所在的 article）
                     const topicPost = document.querySelector(`.topic-post[data-post-number="${pn}"]`);
                     const article = topicPost?.querySelector("article[data-post-id]") ||
-                        document.querySelector(`article[data-post-id]`);
+                        info.btn.closest("article[data-post-id]");
                     if (article) {
                         captureLinuxDoPostElement(article);
                     } else {
