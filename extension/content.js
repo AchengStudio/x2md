@@ -1392,93 +1392,135 @@ function bindAllDebounced() {
     }, 200);
 }
 
-// ── Discourse 点赞按钮拦截（Isolated World capture 阶段）──────────
-// 参考上游 discourse-saver 对链接按钮的拦截方式：
-//   document capture 阶段拦截 → preventDefault + stopImmediatePropagation
-//   单击 = 保存，双击 = 放行原生点赞
-(function initLikeIntercept() {
-    // 仅在 Discourse 域名上启用，避免误拦截其他站点
-    const domains = (typeof getDiscourseDomains === "function" ? getDiscourseDomains() : ["linux.do"]);
-    if (!domains.includes(location.hostname.toLowerCase())) return;
+// ── Discourse 复制链接按钮拦截（与上游 discourse-saver 一致）──────────
+// 单击 = 保存到 Obsidian，双击 = 原生复制链接
+// 拦截目标：帖子底部的"复制链接"按钮（post-action-menu__copy-link）
+(function initCopyLinkIntercept() {
+    const BYPASS_ATTR = "data-x2md-link-bypass";
+    const DOUBLE_CLICK_DELAY = 300;
 
-    const LIKE_SELECTOR = "button.btn-toggle-reaction-like.reaction-button";
-    const DOUBLE_CLICK_DELAY = 350;
-    const BYPASS_ATTR = "data-x2md-like-bypass";
+    let clickCount = 0;
+    let clickTimer = null;
+    let lastPostNumber = null;
 
-    let likeClickCount = 0;
-    let likeClickTimer = null;
-    let lastLikePostId = null;
-
-    function isLikeButton(el) {
+    // 检测是否是复制链接按钮（参考上游 discourse-saver isLinkButton）
+    function isCopyLinkButton(el) {
         if (!el) return null;
-        const btn = el.closest(LIKE_SELECTOR);
+        const btn = el.closest("button") || el.closest("a");
         if (!btn) return null;
-        const article = btn.closest("article[data-post-id]");
-        return article ? { btn, postId: article.getAttribute("data-post-id") } : { btn, postId: "" };
+
+        // 必须在帖子操作菜单内
+        const controls = btn.closest(".post-controls, .post-menu-area, .actions, nav.post-controls");
+        if (!controls) return null;
+
+        const cls = btn.className || "";
+        const title = (btn.title || "").toLowerCase();
+        const aria = (btn.getAttribute("aria-label") || "").toLowerCase();
+        const dataShareUrl = btn.getAttribute("data-share-url");
+
+        // 匹配复制链接按钮的各种特征
+        const match =
+            cls.includes("post-action-menu__copy-link") ||
+            cls.includes("copy-link") ||
+            (dataShareUrl !== null && dataShareUrl !== "") ||
+            cls.includes("share") ||
+            title.includes("将此帖子的链接复制到剪贴板") ||
+            title.includes("复制到剪贴板") ||
+            title.includes("copy a link") ||
+            title.includes("copy") ||
+            title.includes("share") ||
+            aria.includes("链接") ||
+            aria.includes("复制") ||
+            aria.includes("分享") ||
+            aria.includes("share") ||
+            aria.includes("copy");
+
+        if (!match) return null;
+
+        // 获取楼层号
+        const topicPost = btn.closest(".topic-post");
+        const postNumber = topicPost?.getAttribute("data-post-number") ||
+            btn.closest("article[data-post-id]")?.closest(".topic-post")?.getAttribute("data-post-number") ||
+            "1";
+
+        return { btn, postNumber };
+    }
+
+    // 双击时执行原生复制链接
+    function triggerOriginalCopyLink(btn, postNumber) {
+        let linkUrl = window.location.href.replace(/#.*$/, "").replace(/\?.*$/, "");
+        if (postNumber !== "1") {
+            const m = linkUrl.match(/^(.*\/t\/[^/]+\/\d+)(\/\d+)?$/);
+            linkUrl = m ? m[1] + "/" + postNumber : linkUrl + "/" + postNumber;
+        }
+        debugLog("[x2md-link] 复制链接:", linkUrl);
+
+        navigator.clipboard.writeText(linkUrl).then(() => {
+            showToast(postNumber === "1" ? "已复制帖子链接" : `已复制${postNumber}楼链接`, "success", 2000);
+        }).catch(() => {
+            // 回退：bypass 后触发原生点击
+            btn.setAttribute(BYPASS_ATTR, "1");
+            btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+            setTimeout(() => { if (document.contains(btn)) btn.removeAttribute(BYPASS_ATTR); }, 100);
+        });
     }
 
     document.addEventListener("click", function (e) {
-        const info = isLikeButton(e.target);
+        if (!isDiscourseTopicPage()) return;
+
+        const info = isCopyLinkButton(e.target);
         if (!info) return;
 
-        // 双击放行时的合成点击，跳过拦截
+        // bypass 标记的合成点击，放行
         if (info.btn.hasAttribute(BYPASS_ATTR)) {
             info.btn.removeAttribute(BYPASS_ATTR);
             return;
         }
 
-        // 拦截原生行为
+        // 拦截三件套
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
 
-        const isSame = lastLikePostId === info.postId;
+        const isSame = lastPostNumber === info.postNumber;
         if (isSame) {
-            likeClickCount++;
+            clickCount++;
         } else {
-            likeClickCount = 1;
+            clickCount = 1;
+            if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
         }
-        lastLikePostId = info.postId;
+        lastPostNumber = info.postNumber;
 
-        if (likeClickTimer) clearTimeout(likeClickTimer);
+        if (clickTimer) clearTimeout(clickTimer);
 
-        if (likeClickCount >= 2 && isSame) {
-            // 双击 → 放行原生点赞
-            likeClickCount = 0;
-            likeClickTimer = null;
-            info.btn.setAttribute(BYPASS_ATTR, "1");
-            const syntheticClick = new MouseEvent("click", {
-                bubbles: true,
-                cancelable: true,
-                view: window,
-            });
-            info.btn.dispatchEvent(syntheticClick);
-            setTimeout(() => {
-                if (document.contains(info.btn)) {
-                    info.btn.removeAttribute(BYPASS_ATTR);
-                }
-            }, 100);
+        if (clickCount >= 2 && isSame) {
+            // 双击 → 原生复制链接
+            clickCount = 0;
+            clickTimer = null;
+            lastPostNumber = null;
+            triggerOriginalCopyLink(info.btn, info.postNumber);
         } else {
-            // 单击 → 等待超时后保存
-            likeClickTimer = setTimeout(() => {
-                if (likeClickCount === 1) {
-                    debugLog("[x2md-like] 单击保存, postId:", info.postId);
-                    if (info.postId) {
-                        const article = document.querySelector(`article[data-post-id="${info.postId}"]`);
-                        if (article) {
-                            captureLinuxDoPostElement(article);
-                        } else {
-                            captureLinuxDoPostElement(findCurrentLinuxDoPost());
-                        }
+            // 单击 → 保存到 Obsidian
+            const pn = info.postNumber;
+            clickTimer = setTimeout(() => {
+                if (clickCount === 1) {
+                    debugLog("[x2md-link] 单击保存, 楼层:", pn);
+                    // 找到对应帖子元素
+                    const topicPost = document.querySelector(`.topic-post[data-post-number="${pn}"]`);
+                    const article = topicPost?.querySelector("article[data-post-id]") ||
+                        document.querySelector(`article[data-post-id]`);
+                    if (article) {
+                        captureLinuxDoPostElement(article);
                     } else {
                         captureLinuxDoPostElement(findCurrentLinuxDoPost());
                     }
                 }
-                likeClickCount = 0;
-                likeClickTimer = null;
+                clickCount = 0;
+                clickTimer = null;
+                lastPostNumber = null;
             }, DOUBLE_CLICK_DELAY);
         }
-    }, true); // capture 阶段，最先执行
+    }, true); // capture 阶段
 })();
 
 const observer = new MutationObserver(bindAllDebounced);

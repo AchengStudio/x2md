@@ -9,7 +9,6 @@
     }
     function getDiscourseDomains() { return _discourseDomains; }
 
-    const LINUX_DO_LIKE_SELECTOR = "button.btn-toggle-reaction-like.reaction-button";
     const HEADING_TAGS = new Set(["h1", "h2", "h3", "h4", "h5", "h6"]);
     const BLOCK_TAGS = new Set(["p", "div", "section", "article", "blockquote", "ul", "ol", "li", "pre"]);
 
@@ -414,7 +413,6 @@
     }
 
     const exported = {
-        LINUX_DO_LIKE_SELECTOR,
         buildLinuxDoPostTitle,
         cleanLinuxDoPostUrl,
         cookedHtmlToMarkdown,
