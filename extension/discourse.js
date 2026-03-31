@@ -1,5 +1,4 @@
 (function (globalScope) {
-    const LINUX_DO_HOST = "linux.do";
     // 可配置 Discourse 域名列表，运行时从配置注入
     let _discourseDomains = ["linux.do"];
     function setDiscourseDomains(domains) {
@@ -44,10 +43,6 @@
         return _discourseDomains.includes(hostname) && /^\/t\/[^/]+\/\d+(?:\/\d+)?\/?$/.test(pathname);
     }
 
-    // 向后兼容别名
-    function isLinuxDoTopicPage(locationLike) {
-        return isDiscourseTopicPage(locationLike);
-    }
 
     function buildLinuxDoPostTitle(topicTitle, postNumber, username) {
         const cleanTopicTitle = String(topicTitle || "").trim() || "LINUX DO 帖子";
@@ -407,10 +402,6 @@
         };
     }
 
-    // 向后兼容别名（默认使用 linux.do 作为 hostname）
-    function fetchLinuxDoReplies(topicId, hostname) {
-        return fetchDiscourseReplies(topicId, hostname || "linux.do");
-    }
 
     const exported = {
         buildLinuxDoPostTitle,
@@ -418,9 +409,7 @@
         cookedHtmlToMarkdown,
         extractLinuxDoMarkdown,
         extractLinuxDoPostData,
-        fetchLinuxDoReplies,
         fetchDiscourseReplies,
-        isLinuxDoTopicPage,
         isDiscourseTopicPage,
         setDiscourseDomains,
         getDiscourseDomains,

@@ -38,6 +38,7 @@ const SYNC_FIELDS = [
     "notion_database_id",
     "notion_prop_title", "notion_prop_url", "notion_prop_author",
     "notion_prop_tags", "notion_prop_saved_date", "notion_prop_type",
+    "notion_prop_comment_count",
     // HTML 导出
     "html_export_folder",
     // 飞书一键复制
@@ -143,7 +144,6 @@ async function registerDiscourseContentScripts(domains) {
     } catch { /* 服务未启动，跳过 */ }
 })();
 
-// 点赞拦截已移至 content.js（Isolated World capture 阶段），不再需要 MAIN world 注入
 const GRAPHQL_DISCOVERY_CACHE = new Map();
 const _graphqlInflight = new Map();   // 防止并发重复请求同一 origin
 
